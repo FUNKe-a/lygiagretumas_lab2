@@ -2,7 +2,6 @@ package local_io
 
 import (
 	"encoding/json"
-	"fmt"
 	"lygiagretumas_lab2/data_objects"
 	"os"
 )
