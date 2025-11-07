@@ -1,68 +1,94 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"container/list"
+	// "crypto/sha256"
+	// "encoding/hex"
+	// "fmt"
 	"log"
 	"lygiagretumas_lab2/data_objects"
 	"lygiagretumas_lab2/local_io"
 )
 
+const threadCount = 1
+
 func main() {
 	books := local_io.Parse_data("data/IFF-310_KucinskasR_L1b_dat_1.json")
-	main_data_ch := make(chan data_objects.Book)
-	// worker_result_ch := make(chan data_objects.Book)
+	main_data_ch := make(chan *data_objects.Book)
 	worker_data_ch := make(chan bool)
-	data_worker_ch := make(chan data_objects.Book)
+	data_worker_ch := make(chan *data_objects.Book)
+	worker_result_ch := make(chan *data_objects.ComputedData)
+	result_main_ch := make(chan []data_objects.Book)
 
-	go dataThread(len(books)/2, len(books), main_data_ch, worker_data_ch, data_worker_ch)
-	go workerThread(worker_data_ch, data_worker_ch)
+	go dataThread(len(books)/2, main_data_ch, worker_data_ch, data_worker_ch)
+
+	for range threadCount {
+		go workerThread(worker_data_ch, data_worker_ch, worker_result_ch)
+	}
 
 	for _, v := range books {
-		main_data_ch <- v
+		main_data_ch <- &v
 	}
+
+	for range threadCount {
+		pill := data_objects.PoisonPill()
+		main_data_ch <- &pill
+	}
+
 	close(main_data_ch)
+
+	results := <-result_main_ch
+
+	log.Println(results)
 }
 
-func dataThread(size int, el_count int, add <-chan data_objects.Book, request <-chan bool, send chan<- data_objects.Book) {
-	books := make([]data_objects.Book, size)
-	i := 0
+func dataThread(size int, add <-chan *data_objects.Book, request <-chan bool, send chan<- *data_objects.Book) {
+	books := list.New()
+	poison_count := 0
 
-	for range el_count * 2 {
-		var addChan <-chan data_objects.Book
+	for poison_count < threadCount {
+		var addChan <-chan *data_objects.Book
 		var reqChan <-chan bool
-		if i < size {
+		if books.Len() < size {
 			addChan = add
 		}
-		if i > 0 {
+		if books.Len() > 0 {
 			reqChan = request
 		}
+
 		select {
 		case book := <-addChan:
-			books[i] = book
-			i++
+			books.PushBack(book)
+
 		case request := <-reqChan:
 			if request == true {
-				i--
-				send <- books[i]
+				element := books.Remove(books.Front()).(*data_objects.Book)
+				if *element == data_objects.PoisonPill() {
+					poison_count++
+				}
+				send <- element
 			}
 		}
+
 	}
 	close(send)
 }
 
-func workerThread(request chan<- bool, receive <-chan data_objects.Book) {
+func workerThread(request chan<- bool, receive <-chan *data_objects.Book, send chan<- *data_objects.ComputedData) {
 	for {
 		request <- true
-		value, ok := <-receive
-		if !ok {
+		value := <-receive
+
+		if *value == data_objects.PoisonPill() {
+			//pill := data_objects.PoisonPillComp()
+			//send <- &pill
 			break
 		}
-		s := fmt.Sprintf("%d|%.2f|%d", value.Isbn, value.Price, value.Count)
-		h := sha256.Sum256([]byte(s))
-		result := data_objects.ComputedData{value, hex.EncodeToString(h[:])}
-		log.Println(result)
+
+		//s := fmt.Sprintf("%d|%.2f|%d", value.Isbn, value.Price, value.Count)
+		//h := sha256.Sum256([]byte(s))
+		//result := data_objects.ComputedData{value, hex.EncodeToString(h[:])}
+		//send <- &result
 	}
 	close(request)
 }
