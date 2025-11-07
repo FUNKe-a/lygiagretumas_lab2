@@ -5,7 +5,4 @@ type ComputedData struct {
 	Hash string
 }
 
-func PoisonPillComp() ComputedData {
-	pill := PoisonPill()
-	return ComputedData{&pill, "poison"}
-}
+var PoisonPillComp = ComputedData{&PoisonPill, "poison"}
