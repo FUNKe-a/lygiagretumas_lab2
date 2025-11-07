@@ -2,12 +2,14 @@ package main
 
 import (
 	"container/list"
-	// "crypto/sha256"
-	// "encoding/hex"
-	// "fmt"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"log"
 	"lygiagretumas_lab2/data_objects"
 	"lygiagretumas_lab2/local_io"
+	"unicode"
+	"unicode/utf8"
 )
 
 const threadCount = 1
@@ -80,15 +82,22 @@ func workerThread(request chan<- bool, receive <-chan *data_objects.Book, send c
 		value := <-receive
 
 		if *value == data_objects.PoisonPill() {
-			//pill := data_objects.PoisonPillComp()
-			//send <- &pill
+			pill := data_objects.PoisonPillComp()
+			send <- &pill
 			break
 		}
 
-		//s := fmt.Sprintf("%d|%.2f|%d", value.Isbn, value.Price, value.Count)
-		//h := sha256.Sum256([]byte(s))
-		//result := data_objects.ComputedData{value, hex.EncodeToString(h[:])}
-		//send <- &result
+		s := fmt.Sprintf("%s|%.2f|%d", value.Isbn, value.Price, value.Count)
+		h := sha256.Sum256([]byte(s))
+		result := data_objects.ComputedData{Data: value, Hash: hex.EncodeToString(h[:])}
+		rune1, _ := utf8.DecodeRuneInString(result.Hash)
+		if unicode.IsLetter(rune1) {
+			send <- &result
+		}
 	}
 	close(request)
+}
+
+func resultThread(capacity int, receive <-chan *data_objects.ComputedData, send chan<- *data_objects.ComputedData) {
+
 }
