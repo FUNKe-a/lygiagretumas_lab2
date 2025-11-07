@@ -6,8 +6,4 @@ type Book struct {
 	Count uint    `json:"count"`
 }
 
-// func PoisonPill() Book {
-// 	return Book{"poison", 0, 0}
-// }
-
 var PoisonPill = Book{Isbn: "poison"}

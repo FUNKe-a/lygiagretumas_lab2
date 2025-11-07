@@ -12,7 +12,7 @@ func check(e error) {
 	}
 }
 
-func Parse_data(path string) []data_objects.Book {
+func ParseData(path string) []data_objects.Book {
 	file, err := os.ReadFile(path)
 	check(err)
 
