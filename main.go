@@ -8,12 +8,13 @@ import (
 	"log"
 	"lygiagretumas_lab2/data_objects"
 	"lygiagretumas_lab2/local_io"
-	"sort"
+	// "sort"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
-const threadCount = 1
+const threadCount = 10
 
 func main() {
 	books := local_io.Parse_data("data/IFF-310_KucinskasR_L1b_dat_1.json")
@@ -21,7 +22,7 @@ func main() {
 	worker_data_ch := make(chan bool)
 	data_worker_ch := make(chan *data_objects.Book)
 	worker_result_ch := make(chan *data_objects.ComputedData)
-	result_main_ch := make(chan []*data_objects.ComputedData)
+	// result_main_ch := make(chan []*data_objects.ComputedData)
 
 	go dataThread(len(books)/2, main_data_ch, worker_data_ch, data_worker_ch)
 
@@ -29,7 +30,7 @@ func main() {
 		go workerThread(worker_data_ch, data_worker_ch, worker_result_ch)
 	}
 
-	go resultThread(len(books)+1, worker_result_ch, result_main_ch)
+	// go resultThread(len(books)+1, worker_result_ch, result_main_ch)
 
 	for _, v := range books {
 		main_data_ch <- &v
@@ -41,14 +42,16 @@ func main() {
 
 	close(main_data_ch)
 
-	results := <-result_main_ch
+	time.Sleep(time.Second * 2)
 
-	for _, v := range results {
-		log.Println(*v)
-	}
+	// results := <-result_main_ch
+	//
+	// for _, v := range results {
+	// 	log.Println(*v)
+	// }
 }
 
-func dataThread(size int, add <-chan *data_objects.Book, request <-chan bool, send chan<- *data_objects.Book) {
+func dataThread(size int, add <-chan *data_objects.Book, request chan bool, send chan<- *data_objects.Book) {
 	books := list.New()
 	poison_count := 0
 
@@ -66,17 +69,16 @@ func dataThread(size int, add <-chan *data_objects.Book, request <-chan bool, se
 		case book := <-addChan:
 			books.PushBack(book)
 
-		case request := <-reqChan:
-			if request == true {
-				element := books.Remove(books.Front()).(*data_objects.Book)
-				if element == &data_objects.PoisonPill {
-					poison_count++
-				}
-				send <- element
+		case <-reqChan:
+			element := books.Remove(books.Front()).(*data_objects.Book)
+			if element == &data_objects.PoisonPill {
+				poison_count++
 			}
+			send <- element
 		}
 
 	}
+	close(request)
 	close(send)
 }
 
@@ -85,8 +87,9 @@ func workerThread(request chan<- bool, receive <-chan *data_objects.Book, send c
 		request <- true
 		value := <-receive
 
+		log.Println(value)
 		if value == &data_objects.PoisonPill {
-			send <- &data_objects.PoisonPillComp
+			// send <- &data_objects.PoisonPillComp
 			break
 		}
 
@@ -95,30 +98,29 @@ func workerThread(request chan<- bool, receive <-chan *data_objects.Book, send c
 		result := data_objects.ComputedData{Data: value, Hash: hex.EncodeToString(h[:])}
 		rune1, _ := utf8.DecodeRuneInString(result.Hash)
 		if unicode.IsLetter(rune1) {
-			send <- &result
+			// send <- &result
 		}
 	}
-	close(request)
 }
 
-func resultThread(capacity int, receive <-chan *data_objects.ComputedData, send chan<- []*data_objects.ComputedData) {
-	data := make([]*data_objects.ComputedData, 0, capacity)
-	n := 0
-
-	for {
-		element := <-receive
-		if element == &data_objects.PoisonPillComp {
-			break
-		}
-		i := sort.Search(len(data), func(j int) bool {
-			return data[j].Hash >= element.Hash
-		})
-		data = append(data, nil)
-		copy(data[i+1:], data[i:])
-		data[i] = element
-		n++
-	}
-
-	send <- data
-	close(send)
-}
+// func resultThread(capacity int, receive <-chan *data_objects.ComputedData, send chan<- []*data_objects.ComputedData) {
+// 	data := make([]*data_objects.ComputedData, 0, capacity)
+// 	n := 0
+//
+// 	for {
+// 		element := <-receive
+// 		if element == &data_objects.PoisonPillComp {
+// 			break
+// 		}
+// 		i := sort.Search(len(data), func(j int) bool {
+// 			return data[j].Hash >= element.Hash
+// 		})
+// 		data = append(data, nil)
+// 		copy(data[i+1:], data[i:])
+// 		data[i] = element
+// 		n++
+// 	}
+//
+// 	send <- data
+// 	close(send)
+// }
