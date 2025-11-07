@@ -12,12 +12,12 @@ import (
 func main() {
 	books := local_io.Parse_data("data/IFF-310_KucinskasR_L1b_dat_1.json")
 	main_data_ch := make(chan data_objects.Book)
-	worker_data_ch := make(chan data_objects.Book)
-	worker_result_ch := make(chan data_objects.Book)
+	// worker_result_ch := make(chan data_objects.Book)
+	worker_data_ch := make(chan bool)
+	data_worker_ch := make(chan data_objects.Book)
 
-	go dataThread(len(books)/2, main_data_ch, worker_data_ch)
-	go workerThread(len(books), worker_data_ch, worker_result_ch)
-	go workerThread(len(books), worker_data_ch, worker_result_ch)
+	go dataThread(len(books)/2, len(books), main_data_ch, worker_data_ch, data_worker_ch)
+	go workerThread(worker_data_ch, data_worker_ch)
 
 	for _, v := range books {
 		main_data_ch <- v
@@ -25,40 +25,40 @@ func main() {
 	close(main_data_ch)
 }
 
-func dataThread(size int, add <-chan data_objects.Book, remove chan data_objects.Book) {
+func dataThread(size int, el_count int, add <-chan data_objects.Book, request <-chan bool, send chan<- data_objects.Book) {
 	books := make([]data_objects.Book, size)
 	i := 0
 
-	for {
+	for range el_count * 2 {
 		var addChan <-chan data_objects.Book
-		var remChan <-chan data_objects.Book
+		var reqChan <-chan bool
 		if i < size {
 			addChan = add
 		}
 		if i > 0 {
-			remChan = remove
+			reqChan = request
 		}
 		select {
 		case book := <-addChan:
 			books[i] = book
 			i++
-		case request := <-remChan:
-			if request == data_objects.Request() {
+		case request := <-reqChan:
+			if request == true {
 				i--
-				remove <- books[i]
+				send <- books[i]
 			}
 		}
-		if addChan == nil && remChan == nil {
-			break
-		}
 	}
-	log.Println("done")
+	close(send)
 }
 
-func workerThread(size int, request chan data_objects.Book, result <-chan data_objects.Book) {
-	for range size {
-		request <- data_objects.Request()
-		value := <-request
+func workerThread(request chan<- bool, receive <-chan data_objects.Book) {
+	for {
+		request <- true
+		value, ok := <-receive
+		if !ok {
+			break
+		}
 		s := fmt.Sprintf("%d|%.2f|%d", value.Isbn, value.Price, value.Count)
 		h := sha256.Sum256([]byte(s))
 		result := data_objects.ComputedData{value, hex.EncodeToString(h[:])}
